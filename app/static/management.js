@@ -6,11 +6,15 @@ function renderTeacher(){
  const cls=classes.find(c=>c.id===classId);draft??=newDraft();chapterDrafts[draft.chapter]=draft;
  const classOptions=options(classes.map(c=>[c.id,`${c.name} · ${c.students.length}人`]),classId);
  const profiles=options(course.profiles.map(p=>[p.id,p.name]),'textbook');
+ const openingBalances=course.profiles.filter(p=>p.opening_bank_deposits).map(p=>{
+  const {hospital,school}=p.opening_bank_deposits;
+  return `<p class="hint">${esc(p.name)}期初银行存款：人民医院 ${(hospital/10000).toLocaleString('zh-CN')} 万元，职业学校 ${(school/10000).toLocaleString('zh-CN')} 万元。</p>`;
+ }).join('');
  $('#class').innerHTML=`
  <nav class="tabs" aria-label="教师工作区"><button class="tab" data-teacher-pane="manage">班级管理</button><button class="tab" data-teacher-pane="assign">任务分配</button></nav>
  <section id="class-management">
  <div class="card"><p class="eyebrow">班级模板</p><h1>先建班，再分配任务</h1><p class="hint">只创建班级、学生账号和每生一个账套，不自动布置练习。</p>
- <form id="template-form" class="form-grid"><label>班级名称<input name="name" required value="政府会计学实训班" maxlength="100"></label><label>学期<input name="term" value="2026秋"></label>
+ ${openingBalances}<form id="template-form" class="form-grid"><label>班级名称<input name="name" required value="政府会计学实训班" maxlength="100"></label><label>学期<input name="term" value="2026秋"></label>
  <fieldset class="wide"><legend>班级人数</legend><div class="choices">${course.class_templates.map(c=>`<label><input type="radio" name="size" value="${c.size}" ${c.size===30?'checked':''}>${c.name}</label>`).join('')}</div></fieldset>
  <label>账号前缀<input name="username_prefix" value="caifa" required pattern="[A-Za-z0-9_-]{3,20}"></label><label>班级账套方案<select name="profile_id">${profiles}</select></label><button class="primary">创建班级与学生账号</button></form>
  <details><summary>创建空白班级</summary><form id="class-form" class="form-grid"><label>名称<input name="name" required></label><label>学期<input name="term"></label><label>账套方案<select name="profile_id">${profiles}</select></label><button>创建班级</button></form></details></div>

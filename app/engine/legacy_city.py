@@ -33,7 +33,11 @@ class City:
         self.ledger['fiscal']['股权投资']=fen(12000000);self.ledger['fiscal']['累计盈余']-=fen(12000000)
         self.opening_cash=self.total_cash();self.check()
     def cash_account(self,e):return '国库存款' if e=='fiscal' else '银行存款'
-    def total_cash(self):return sum(self.ledger[e][self.cash_account(e)] for e in NAMES)+sum(self.external.values())
+    def total_cash(self):
+        if getattr(self, 'textbook_revision', None):
+            from ..textbook import money_total
+            return money_total(self) + sum(self.external.values())
+        return sum(self.ledger[e][self.cash_account(e)] for e in NAMES)+sum(self.external.values())
     def post(self,e,book,dr,cr,event):
         assert sum(dr.values())==sum(cr.values()),'凭证借贷不平'
         assert all(isinstance(v,int) and v>=0 for v in [*dr.values(),*cr.values()]),'金额必须为非负整数分'
@@ -277,10 +281,11 @@ class City:
     def check(self):
         assert all(sum(x.values())==0 for x in self.ledger.values()),'财务试算不平'
         assert all(sum(x.values())==0 for x in self.budget.values()),'预算试算不平'
-        assert all(self.ledger[e][self.cash_account(e)]>=0 for e in NAMES),'现金为负'
+        assert all(self.ledger[e][self.cash_account(e)]>=0 for e in self.ledger),'现金为负'
         assert self.total_cash()==self.opening_cash,'现金守恒失败'
         assert all(v>=0 for v in self.population.values()),'人口为负'
-        assert self.ledger['police']['应缴财政款']==0,'模拟罚没款未缴库'
+        if not getattr(self, 'textbook_revision', None):
+            assert self.ledger['police']['应缴财政款']==0,'模拟罚没款未缴库'
     def export(self,path):
         path=Path(path);path.mkdir(parents=True,exist_ok=True)
         for name,data in [('当前状态',self.report()),('年度报表数据',self.year_reports),('业务事件',self.events),('会计凭证',self.journals)]:

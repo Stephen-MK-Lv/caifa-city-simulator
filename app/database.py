@@ -2,7 +2,7 @@ from contextlib import contextmanager
 from pathlib import Path
 import time
 from sqlalchemy import (create_engine, event, String, Integer, BigInteger, Float, Boolean,
-                        JSON, ForeignKey, UniqueConstraint, CheckConstraint, Index)
+                        JSON, ForeignKey, UniqueConstraint, CheckConstraint, Index, Computed)
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, Session
 
 
@@ -133,6 +133,7 @@ class BusinessEvent(Base):
     simulation_id: Mapped[str] = mapped_column(ForeignKey('simulations.id'))
     event_key: Mapped[str] = mapped_column(String(120))
     sequence: Mapped[int] = mapped_column(Integer)
+    business_code: Mapped[str] = mapped_column(String(24), Computed("'业-' || sequence", persisted=False))
     month: Mapped[int] = mapped_column(Integer)
     entity: Mapped[str] = mapped_column(String(20))
     kind: Mapped[str] = mapped_column(String(30))
@@ -159,6 +160,8 @@ class JournalLine(Base):
     __table_args__ = (CheckConstraint('amount_fen >= 0'), CheckConstraint("side in ('debit','credit')"))
     id: Mapped[int] = mapped_column(Integer, primary_key=True)
     voucher_id: Mapped[int] = mapped_column(ForeignKey('vouchers.id'), index=True)
+    entity: Mapped[str | None] = mapped_column(String(20))
+    book: Mapped[str | None] = mapped_column(String(15))
     side: Mapped[str] = mapped_column(String(8))
     account: Mapped[str] = mapped_column(String(160))
     amount_fen: Mapped[int] = mapped_column(BigInteger)
@@ -237,6 +240,17 @@ class Database:
             columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(simulations)')}
             if 'owner_user_id' not in columns:
                 connection.exec_driver_sql('ALTER TABLE simulations ADD COLUMN owner_user_id INTEGER REFERENCES users(id)')
+            journal_columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_info(journal_lines)')}
+            if 'entity' not in journal_columns:
+                connection.exec_driver_sql('ALTER TABLE journal_lines ADD COLUMN entity VARCHAR(20)')
+            if 'book' not in journal_columns:
+                connection.exec_driver_sql('ALTER TABLE journal_lines ADD COLUMN book VARCHAR(15)')
+            event_columns = {row[1] for row in connection.exec_driver_sql('PRAGMA table_xinfo(business_events)')}
+            if 'business_code' not in event_columns:
+                connection.exec_driver_sql(
+                    "ALTER TABLE business_events ADD COLUMN business_code VARCHAR(24) "
+                    "GENERATED ALWAYS AS ('业-' || sequence) VIRTUAL"
+                )
 
     @contextmanager
     def transaction(self, write=False):

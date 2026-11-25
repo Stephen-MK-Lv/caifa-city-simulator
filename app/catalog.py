@@ -24,11 +24,16 @@ CATALOG = [
 BY_KIND = {c['kind']: c for c in CATALOG}
 LABELS = {c['kind']: c['name'] for c in CATALOG} | {'year_close': '年度结账与利润分配'}
 
+from .textbook import CATALOG as TEXTBOOK_CATALOG, CATALOG_BY_KIND
+
+# Legacy definitions are retained for reading existing tasks and vouchers.
+LABELS.update({c['kind']: c['name'] for c in TEXTBOOK_CATALOG})
+PUBLIC_CATALOG = TEXTBOOK_CATALOG
+BY_KIND.update(CATALOG_BY_KIND)
+
 POLICY_NOTES = [
-    '虚拟仿真数据，不是现实城市数字孪生，也不是法定财政报送系统。',
-    '规则沿用教材离线原型，未连接外部AI模型。税率、股权60%、利润分配比例等均为既有仿真假设。',
-    '财政总会计与单位机关会计分别看待，国企只有企业财务账。各主体收入费用未经抵销，不能直接加总为全市财政或GDP。',
-    '每12个月自动结账。当前余额显示结账后的状态；全年收支请选“年度结账前报告”。',
-    '自动运行由本地服务器调度，关闭网页仍可推进；关闭服务器会停止。默认年末自动暂停，重启不补跑错过的时间。',
-    '原型资金来源标签、学校专户清算与资产汇总交付均作了简化，不支持完整项目审批、专项债、基金会计及法定报表。',
+    '新增业务取自《政府会计教程》1125版正文例题。多阶段例题按业务时点拆分，一项业务生成一个凭证号。',
+    '财务会计与预算会计分录依例题列示。财政直接支付和实拨在同一业务中同步记录财政总会计分录。财政授权额度下达时记录额度，实际国库资金结算时确认财政支出。',
+    '每12个月保存年度账簿快照。可按月观察账簿和业务。已有账套中的原版历史记录保留并标记。',
+    '月度自动运行由服务器调度。默认年末暂停。报表基础数据按会计主体分列。',
 ]

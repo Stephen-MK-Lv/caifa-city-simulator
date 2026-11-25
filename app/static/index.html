@@ -8,7 +8,8 @@
   <link rel="stylesheet" href="/static/monthly.css?v=20261024-city-v6">
   <link rel="stylesheet" href="/static/monthly-compact.css?v=20261024-city-v6">
   <script src="/static/monthly.js?v=20261025-restored" defer></script>
-  <script src="/static/app.js?v=20261123-monthly-entry" defer></script>
+  <script src="/static/app.js?v=20261126-business-code" defer></script>
+  <link rel="stylesheet" href="/static/theme.css?v=20261126"><script src="/static/theme.js?v=20261126"></script>
 </head>
 <body>
 <a href="#main" class="skip-link">跳到主要内容</a>
@@ -31,12 +32,12 @@
   <div class="side-footer"><span class="status-dot"></span> 本地运行 · 持久保存<small>FastAPI ＋ SQLAlchemy<br>规则驱动的虚拟仿真城市</small></div>
 </aside>
 <main id="main">
-  <header class="topbar"><span id="breadcrumb">仿真工作台 / 城市当前总览</span><span class="top-note">独立账套 · 固定种子 · 业务可追溯</span></header>
+  <header class="topbar"><span id="breadcrumb">仿真工作台 / 城市当前总览</span><div class="header-controls"><span class="top-note">独立账套 · 固定种子 · 业务可追溯</span><label class="theme-picker">界面配色<select data-theme-select><option value="celadon">青瓷绿</option><option value="indigo">靛蓝</option><option value="sand">暖砂</option><option value="mono">黑白</option></select></label></div></header>
   <div id="connection-alert" class="alert danger" hidden role="alert"></div>
   <div class="page-heading"><div><p class="eyebrow">CAIFA / CITY SIMULATION</p><h1 id="page-title">让业务发生，让账目清晰。</h1><p id="page-subtitle" class="subtitle">基于城市发展，动态理解一座城市。</p></div><button class="button secondary" id="export-button" disabled>↓ 导出账套数据</button></div>
   <section id="empty-state" class="onboarding" hidden>
     <span class="empty-symbol">彩</span><h2>从一座有据可查的城市开始</h2>
-    <p>财政局、医院、学校、公安局和国企在同一情景中运行。<br>每次业务留下凭证，每个账套独立保存。</p>
+    <p>财政总会计、人民医院、职业学校和公安局在同一情景中运行。<br>每次业务留下凭证，每个账套独立保存。</p>
     <button id="first-city" class="button primary">创建彩珐市账套 <span>＋</span></button>
     <div class="onboarding-foot">荆州公开数据参考 / 原教材方案可选<span>5 个核心主体</span>财务、预算双视角</div>
   </section>
@@ -56,8 +57,8 @@
   <form id="create-form"><div class="dialog-header"><div><p class="eyebrow">NEW SIMULATION</p><h2>新建独立账套</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div>
     <p class="muted">保留原有账套；相同方案、版本、种子与操作顺序可重演业务路径。</p>
     <label>账套名称<input name="name" required maxlength="60" value="彩珐市 · 课堂实训" autocomplete="off"></label>
-    <label>仿真数据方案<select name="profile_id"><option value="jingzhou2025">荆州公开数据参考（2025年 / 1∶100）</option><option value="textbook">原教材基准（保留原规则）</option></select></label>
-    <p class="field-hint">荆州方案：期初50,829人、724个示范岗位。国库资金按仿真规则设置。不改写已有账套。</p>
+    <label>仿真数据方案<select name="profile_id"><option value="jingzhou2025">荆州公开数据参考（2025年 / 1∶100）</option><option value="textbook">彩珐市教材例题（1125版）</option></select></label>
+    <p class="field-hint">荆州方案：期初50,829人、574个示范岗位。国库资金按仿真规则设置。不改写已有账套。</p>
     <div class="form-row"><label>随机种子<input name="seed" type="number" value="20260906" min="0" max="4294967295" required></label><label>预运行<select name="initial_months"><option value="0">从期初开始</option><option value="1">演示 1 个月</option><option value="3">演示 3 个月</option><option value="12">演示 1 年</option></select></label></div>
     <p class="form-error" id="create-error" role="alert"></p><button type="submit" class="button primary full">创建账套</button>
   </form>
@@ -67,7 +68,7 @@
     <label>业务类型<select name="kind" id="event-kind"></select></label>
     <p id="event-hint" class="field-hint"></p>
     <div class="form-row"><label>核算主体<select name="entity" id="event-entity"></select></label><label id="amount-label"><span id="amount-text">金额（元）</span><input name="amount" type="number" step="0.01" min="0.01" max="1000000000" required></label></div>
-    <div id="event-extra"></div><label>业务编号（可选）<input name="event_id" maxlength="80" placeholder="如：课堂医疗001" autocomplete="off"><small>相同编号防止重复记账，不同内容请使用新编号。</small></label>
+    <p class="field-hint">业务入账时按账套顺序分配业务编号，如业-1、业-2。</p>
     <p class="form-error" id="event-error" role="alert"></p><button type="submit" class="button primary full">执行并生成会计记录</button>
   </form>
 </dialog>

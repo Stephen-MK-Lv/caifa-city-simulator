@@ -10,12 +10,12 @@ from fastapi.responses import FileResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from sqlalchemy.exc import OperationalError
-from .database import Database, Simulation, StudentWork
+from .database import Database, Simulation
 from sqlalchemy import select
 from .service import SimulationService, NotFound, Conflict, RuleError
 from .schemas import CreateSimulation, Advance, EventInput, RunControl
-from .catalog import CATALOG, POLICY_NOTES
-from .engine import NAMES
+from .catalog import PUBLIC_CATALOG, POLICY_NOTES
+from .textbook import ACTORS
 from .teaching import (auth_router, router as teaching_router, current_user,
                        visible_simulations, initialize_class_cities,
                        initialize_deployment_teacher)
@@ -69,12 +69,6 @@ def create_app(db_path=None, scheduler=True):
                 return JSONResponse({'detail':getattr(exc,'detail','请先登录仿真平台')},status)
             request.state.platform_user=identity
             parts=request.url.path.strip('/').split('/')
-            if request.method == 'POST' and len(parts) >= 4 and parts[3] in {'advance', 'events', 'run'}:
-                with request.app.state.db.transaction() as session:
-                    waiting = session.scalar(select(StudentWork.id).where(StudentWork.simulation_id == parts[2],
-                        StudentWork.confirmed_at.is_(None)).limit(1))
-                if waiting:
-                    return JSONResponse({'detail':'该账套有未完成仿真任务，请先按发布顺序确认入账；期间不能推进月份、自动运行或另行触发业务，以免参考答案失效'},409)
             if len(parts)>=3:
                 with request.app.state.db.transaction() as session:
                     permitted=session.scalar(visible_simulations(identity).where(Simulation.id==parts[2]))
@@ -85,7 +79,7 @@ def create_app(db_path=None, scheduler=True):
                 if request.url.path=='/api/simulations' and request.method=='GET':
                     pass
                 elif request.url.path=='/api/simulations' and request.method=='POST':
-                    return JSONResponse({'detail':'学生账套由教师发布实训任务后自动创建'},403)
+                    return JSONResponse({'detail':'学生账套由班级管理生成'},403)
                 elif len(parts)>=3:
                     with request.app.state.db.transaction() as session:
                         sim=session.get(Simulation,parts[2])
@@ -119,10 +113,10 @@ def create_app(db_path=None, scheduler=True):
         return JSONResponse({'detail':'数据库暂时不可用，请稍后重试。未提交的操作已回滚。'},503)
 
     @app.get('/api/health')
-    def health(): return {'status':'ok','database':'sqlite','engine':'SQLAlchemy 2.0','release':'2026-10-23-classroom'}
+    def health(): return {'status':'ok','database':'sqlite','engine':'SQLAlchemy 2.0','release':'textbook-1125-4'}
 
     @app.get('/api/catalog')
-    def catalog(): return {'events':CATALOG,'entities':NAMES,'notes':POLICY_NOTES}
+    def catalog(): return {'events':PUBLIC_CATALOG,'entities':ACTORS,'notes':POLICY_NOTES}
 
     @app.get('/api/simulations')
     def simulations(request:Request):

@@ -2,7 +2,7 @@
 from collections import Counter, defaultdict
 from sqlalchemy import select
 from .database import MonthSnapshot, BusinessEvent, Voucher
-from .engine import NAMES
+from .textbook import ACTORS, sections
 
 
 def snapshot_payload(report):
@@ -24,37 +24,44 @@ def monthly_series(session, sim, current_report):
     # Current report is authoritative for the current month, even for legacy databases.
     snapshots[sim.month] = snapshot_payload(current_report)
     events=Counter(); by_entity=Counter(); types=defaultdict(Counter); people=defaultdict(Counter)
-    for e in session.scalars(select(BusinessEvent).where(BusinessEvent.simulation_id==sim.id)):
+    for e in session.scalars(select(BusinessEvent).where(BusinessEvent.simulation_id==sim.id, BusinessEvent.entity.in_(ACTORS))):
         events[e.month]+=1;by_entity[e.month,e.entity]+=1;types[e.month][e.kind]+=1
         if e.kind in {'birth','death','enrol'}:
             people[e.month][e.kind]+=int(e.payload['amount_yuan_or_count'])
     vouchers=Counter(); flows=defaultdict(lambda:Counter())
-    for v in session.scalars(select(Voucher).where(Voucher.simulation_id==sim.id)):
-        vouchers[v.month,v.entity]+=1
-        j=v.payload;debit=j['debit'];credit=j['credit'];accounts=set(debit)|set(credit)
-        f=flows[v.month,v.entity]
-        if v.book=='financial':
-            cash='国库存款' if v.entity=='fiscal' else '银行存款'
-            f['cash_in_yuan']+=debit.get(cash,0);f['cash_out_yuan']+=credit.get(cash,0)
-            if not accounts.intersection({'本年利润','本期盈余'}):
+    voucher_totals = Counter()
+    for v in session.scalars(select(Voucher).where(Voucher.simulation_id==sim.id, Voucher.entity.in_(ACTORS))):
+        parts = sections(v.payload)
+        voucher_totals[v.month] += 1
+        for subject in {part['entity'] for part in parts}:
+            vouchers[v.month, subject] += 1
+        for part in parts:
+            debit, credit = part['debit'], part['credit']
+            accounts = set(debit) | set(credit)
+            f = flows[v.month, part['entity']]
+            if part['book']=='financial':
+                cash = {'国库存款', '其他财政存款'} if part['entity']=='fiscal' else {'银行存款', '库存现金'}
+                cash_delta = sum(debit.get(a, 0) - credit.get(a, 0) for a in cash)
+                f['cash_in_yuan'] += max(0, cash_delta)
+                f['cash_out_yuan'] += max(0, -cash_delta)
+                if not accounts.intersection({'本年利润','本期盈余'}):
+                    for account in accounts:
+                        net = credit.get(account,0)-debit.get(account,0)
+                        if '收入' in account or account=='投资收益': f['revenue_yuan'] += net
+                        if '费用' in account: f['expense_yuan'] -= net
+            elif not any('结转' in a or '结余' in a for a in accounts):
                 for account in accounts:
-                    net=credit.get(account,0)-debit.get(account,0)
-                    if '收入' in account or account=='投资收益':f['revenue_yuan']+=net
-                    if '费用' in account or account=='营业成本':f['expense_yuan']-=net
-        elif not any('结转' in a or '结余' in a for a in accounts):
-            for account in accounts:
-                net=credit.get(account,0)-debit.get(account,0)
-                if '收入' in account:f['budget_revenue_yuan']+=net
-                if '支出' in account:f['budget_expenditure_yuan']-=net
+                    net = credit.get(account,0)-debit.get(account,0)
+                    if '收入' in account: f['budget_revenue_yuan'] += net
+                    if '支出' in account: f['budget_expenditure_yuan'] -= net
     fields=['cash_in_yuan','cash_out_yuan','revenue_yuan','expense_yuan','budget_revenue_yuan','budget_expenditure_yuan']
     points=[]
     for month in range(sim.month+1):
         snap=snapshots.get(month,{})
         entities={}
-        for key in NAMES:
+        for key in ACTORS:
             stock=snap.get('entities',{}).get(key,{})
             flow={name:round(flows[month,key][name]/100,2) for name in fields}
-            if key=='soe':flow['budget_revenue_yuan']=flow['budget_expenditure_yuan']=None
             entities[key]={**{name:stock.get(name) for name in ['cash_yuan','jobs','receivables_yuan','fixed_assets_net_yuan','construction_yuan']},
                 **flow,'surplus_yuan':round(flow['revenue_yuan']-flow['expense_yuan'],2),
                 'event_count':by_entity[month,key],'voucher_count':vouchers[month,key], 'stock_recorded':bool(stock)}
@@ -64,9 +71,16 @@ def monthly_series(session, sim, current_report):
             'population':snap.get('population'),'population_groups':snap.get('population_groups'),
             'students':snap.get('students'),'jobs':snap.get('jobs'), 'fiscal_cash_yuan':snap.get('fiscal_cash_yuan'),
             'births':people[month]['birth'],'deaths':people[month]['death'],'enrolments':people[month]['enrol'],
-            'event_count':events[month],'voucher_count':sum(vouchers[month,key] for key in NAMES),
+            'event_count':events[month],'voucher_count':voucher_totals[month],
             'business_types':dict(types[month]), 'entities':entities}
         previous=points[-1] if points else None
+        if previous and previous.get('population_groups') and point.get('population_groups'):
+            if not people[month]:
+                old, new = previous['population_groups'], point['population_groups']
+                point['births'] = max(0, new['children'] - old['children'])
+                point['deaths'] = max(0, old['seniors'] - new['seniors'])
+                if previous.get('students') is not None and point.get('students') is not None:
+                    point['enrolments'] = max(0, point['students'] - previous['students'])
         point['change']={name:(round(point[name]-previous[name],2) if previous and point[name] is not None and previous[name] is not None else None)
             for name in ['population','students','jobs','fiscal_cash_yuan','event_count']}
         points.append(point)

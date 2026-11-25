@@ -1,7 +1,7 @@
 from decimal import Decimal
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
-from .catalog import BY_KIND
+from .textbook import CATALOG_BY_KIND, statement
 
 
 class StrictModel(BaseModel):
@@ -40,15 +40,9 @@ class RunControl(Mutation):
 
 class EventInput(Mutation):
     kind: str
-    entity: Literal['fiscal', 'hospital', 'school', 'police', 'soe']
+    entity: Literal['fiscal', 'hospital', 'school', 'police']
     amount: Decimal = Field(default=Decimal(0), ge=0, le=Decimal('1000000000'), max_digits=12, decimal_places=2)
     event_id: str | None = Field(default=None, max_length=80, pattern=r'^[\w\-.:\u4e00-\u9fff]+$')
-    project: Literal['运行','资本性','工资','商品服务'] = '运行'
-    fund: Literal['self','fiscal'] = 'self'
-    product: Literal['供电','供水','汽车'] = '供电'
-    name: str = Field(default='仿真设备', min_length=1, max_length=60)
-    life: int = Field(default=60, ge=1, le=1200, strict=True)
-
     @field_validator('amount', mode='before')
     @classmethod
     def no_bool(cls, value):
@@ -57,12 +51,9 @@ class EventInput(Mutation):
 
     @model_validator(mode='after')
     def valid_event(self):
-        c = BY_KIND.get(self.kind)
+        c = CATALOG_BY_KIND.get(self.kind)
         if not c: raise ValueError('未知业务类型')
         if self.entity not in c['entities']: raise ValueError('该业务不适用于所选主体')
-        if c['unit']=='人' and (self.amount!=self.amount.to_integral_value() or self.amount>100000):
-            raise ValueError('人数须为不超过100000的整数')
-        if c['unit']=='无' and self.amount!=0: raise ValueError('本事件自动计算金额，无需输入')
-        if c['unit']!='无' and self.amount<=0: raise ValueError('金额或人数必须大于零')
-        if any(ord(x)<32 for x in self.name): raise ValueError('资产名称不能含控制字符')
+        if self.amount<=0: raise ValueError('金额必须大于零')
+        statement(self.kind, self.amount)
         return self

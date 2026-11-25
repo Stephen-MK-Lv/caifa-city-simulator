@@ -1,7 +1,7 @@
 """Classroom templates, grouped exercises and traceable assessment."""
 import copy
 import os
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
+from decimal import Decimal, InvalidOperation
 import hashlib
 import hmac
 import random
@@ -15,12 +15,12 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, func, or_, delete
 from sqlalchemy.exc import IntegrityError
 from .chapters import CHAPTERS
-from .catalog import BY_KIND, CATALOG
+from .textbook import (ACTORS, BY_CASE, CATALOG, OPENING_BANK_DEPOSITS, amount_step, display_report,
+                       new_city, post_case, prerequisite, sections, statement)
 from .database import (ClassMember, ClassCity, LoginSession, Simulation, StudentWork,
                        TeachingAssignment, TeachingAudit, TeachingClass, User,
                        BusinessEvent, Voucher)
-from .engine import City, NAMES
-from .engine.jingzhou import JingzhouCity
+from .engine import fen
 from .engine.state import load_city
 from .schemas import EventInput
 from .service import metadata, persist, restore, remember_snapshot, digest
@@ -28,25 +28,7 @@ from .service import metadata, persist, restore, remember_snapshot, digest
 router = APIRouter(prefix='/api/teaching', tags=['仿真系统'])
 auth_router = APIRouter(prefix='/api/auth', tags=['平台账号'])
 WEIGHTS = {'主体': 20, '账套': 20, '科目': 30, '方向': 20, '金额': 10}
-DEFAULT_INSTRUCTION = '逐项阅读业务资料，独立编制完整分录，判断是否平行记账；核对初评依据，再解释财务与预算报告的变化。'
-EXERCISE_TEMPLATES = [
-    {'id': 'foundation', 'name': '双基础入门', 'description': '医疗服务与可退保证金，辨认收入和负债。', 'events': [
-        {'kind': 'medical', 'entity': 'hospital', 'amount': '12000'},
-        {'kind': 'deposit', 'entity': 'hospital', 'amount': '20000'}]},
-    {'id': 'assets', 'name': '资产与财政保障', 'description': '拨款、采购、维修和折旧，追踪资产全流程。', 'events': [
-        {'kind': 'grant', 'entity': 'hospital', 'amount': '100000', 'project': '资本性'},
-        {'kind': 'purchase', 'entity': 'hospital', 'amount': '60000'},
-        {'kind': 'repair', 'entity': 'hospital', 'amount': '8000'},
-        {'kind': 'depreciation', 'entity': 'hospital', 'amount': '0'}]},
-    {'id': 'comprehensive', 'name': '城市综合实训', 'description': '医院、学校和国企七项业务，联系收支、成本和税费。', 'events': [
-        {'kind': 'medical', 'entity': 'hospital', 'amount': '15000'},
-        {'kind': 'collect', 'entity': 'hospital', 'amount': '0'},
-        {'kind': 'purchase', 'entity': 'hospital', 'amount': '35000'},
-        {'kind': 'salary', 'entity': 'hospital', 'amount': '20000'},
-        {'kind': 'fee', 'entity': 'school', 'amount': '6000'},
-        {'kind': 'sales', 'entity': 'soe', 'amount': '50000'},
-        {'kind': 'tax', 'entity': 'soe', 'amount': '1000'}]},
-]
+DEFAULT_INSTRUCTION = '每项业务填制一张会计凭证。按教材例题分别填写财务会计和预算会计分录，提交后核查初评。'
 
 
 class Input(BaseModel):
@@ -76,21 +58,16 @@ class StudentCreate(Credentials):
 
 class BusinessSpec(Input):
     kind: str
-    entity: Literal['fiscal', 'hospital', 'school', 'police', 'soe']
+    entity: Literal['fiscal', 'hospital', 'school', 'police']
     amount: Decimal = Field(default=Decimal('0'), ge=0, le=Decimal('1000000000'), max_digits=12, decimal_places=2)
-    product: Literal['供电', '供水', '汽车'] = '供电'
-    project: Literal['运行', '资本性', '工资', '商品服务'] = '运行'
-    fund: Literal['self', 'fiscal'] = 'self'
-    asset_name: str = Field(default='仿真设备', min_length=1, max_length=60)
-    life: int = Field(default=60, ge=1, le=1200)
 
 
 class PublishBase(Input):
     class_id: str
-    chapter: int = Field(ge=1, le=14)
+    chapter: int = Field(ge=1, le=15)
     title: str = Field(min_length=1, max_length=160)
     instruction: str = Field(default=DEFAULT_INSTRUCTION, min_length=1, max_length=3000)
-    amount_variation_percent: int = Field(default=8, ge=0, le=25)
+    amount_variation_percent: int = Field(default=0, ge=0, le=25)
     profile_id: Literal['textbook', 'jingzhou2025'] = 'textbook'
     request_id: str | None = Field(default=None, min_length=8, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
 
@@ -106,7 +83,7 @@ class AssignmentGroupCreate(PublishBase):
 class AssignmentBatch(Input):
     class_id: str
     request_id: str = Field(min_length=8, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
-    tasks: list[AssignmentGroupCreate] = Field(min_length=1, max_length=14)
+    tasks: list[AssignmentGroupCreate] = Field(min_length=1, max_length=15)
 
 
 class ClassDelete(Input):
@@ -117,16 +94,12 @@ class TemplateClassCreate(ClassCreate):
     size: int = Field(ge=1, le=100)
     username_prefix: str = Field(default='caifa', min_length=3, max_length=20, pattern=r'^[A-Za-z0-9_-]+$')
     request_id: str = Field(min_length=8, max_length=80, pattern=r'^[A-Za-z0-9_-]+$')
-    chapter: int = Field(default=1, ge=1, le=14)
-    exercise_template_id: Literal['none', 'foundation', 'assets', 'comprehensive'] = 'none'
-    amount_variation_percent: int = Field(default=8, ge=0, le=25)
+    exercise_template_id: Literal['none'] = 'none'
     profile_id: Literal['textbook', 'jingzhou2025'] = 'textbook'
 
 
 class Submission(Input):
     entries: list[dict] = Field(max_length=400)
-    student_note: str = Field(default='', max_length=2000)
-    analysis: str = Field(default='', max_length=4000)
 
 
 class StudentCheck(Input):
@@ -278,119 +251,84 @@ def logout(request: Request, user=Depends(current_user), authorization: str | No
     return {'ok': True}
 
 
-def canonical_event(body):
-    spec = BY_KIND.get(body.kind)
-    if not spec:
-        raise HTTPException(422, '未知业务类型，请刷新页面重试')
-    values = {'kind': body.kind, 'entity': body.entity, 'amount': body.amount,
-              'product': body.product, 'project': body.project, 'fund': body.fund,
-              'name': body.asset_name, 'life': body.life}
+def canonical_event(body, chapter):
+    if body.kind not in CHAPTERS[chapter - 1]['business_kinds']:
+        raise HTTPException(422, '所选业务未列入本章教材实训')
     try:
-        checked = EventInput.model_validate({'request_id': 'validate-scenario', 'expected_version': 0, **values})
+        checked = EventInput(request_id='validate-scenario', expected_version=0, kind=body.kind,
+                             entity=body.entity, amount=body.amount)
     except ValueError as exc:
-        raise HTTPException(422, f"{spec['name']}：主体、金额或业务参数无效，请检查适用主体和计量单位。") from exc
-    return {'kind': checked.kind, 'entity': checked.entity, 'amount': str(checked.amount),
-            'parameters': {k: values[k] for k in spec['fields']}}
-
-
-def new_city(profile, seed):
-    return JingzhouCity(seed) if profile == 'jingzhou2025' else City(seed)
+        raise HTTPException(422, f"{BY_CASE[body.kind]['source']}：请核对会计主体、金额及例题分项比例。") from exc
+    return {'kind': checked.kind, 'entity': checked.entity, 'amount': str(checked.amount)}
 
 
 def execute_event(city, event):
-    amount = float(event['amount_yuan_or_count'])
-    if event['kind'] == 'tax':
-        available = max(0, -city.ledger['soe']['应交税费——应交增值税'])
-        if Decimal(str(amount)) * 100 > available:
-            raise ValueError('缴税金额超过当前应交增值税余额')
-    city.event(event['kind'], amount, event['entity'], event_id=event['event_id'], **event['parameters'])
+    return post_case(city, event['kind'], event['entity'], Decimal(event['amount_yuan_or_count']), event['event_id'])
 
 
 def expected_entries(city, start):
-    rows = []
-    for v in city.journals[start:]:
-        for side in ('debit', 'credit'):
-            for account, amount in v[side].items():
-                if amount:
-                    rows.append({'event_id': v['event_id'], 'entity': v['entity'], 'book': v['book'],
-                                 'side': side, 'account': account, 'amount_fen': int(amount)})
-    return rows
+    return [
+        {'event_id': voucher['event_id'], 'entity': part['entity'], 'book': part['book'],
+         'side': side, 'account': account, 'amount_fen': amount}
+        for voucher in city.journals[start:] for part in sections(voucher) if not part.get('automatic')
+        for side in ('debit', 'credit') for account, amount in part[side].items()
+    ]
 
 
 def prepare_case(assignment, student, work_id, base_city=None):
     config = assignment.scenario
-    specs = config.get('events') or [{k: config[k] for k in ('kind', 'entity', 'amount', 'parameters')}]
+    specs = config['events']
     seed = int.from_bytes(hashlib.sha256(f'{assignment.id}:{student.id}'.encode()).digest()[:4], 'big')
-    rng = random.Random(seed)
-    events = []
-    for n, spec in enumerate(specs, 1):
-        unit = BY_KIND[spec['kind']]['unit']
-        amount = Decimal(spec['amount'])
-        if amount and config['variation']:
-            amount *= Decimal(str(rng.uniform(1-config['variation']/100, 1+config['variation']/100)))
-        amount = amount.quantize(Decimal('1') if unit == '人' else Decimal('.01'), rounding=ROUND_HALF_UP)
-        if unit != '无':
-            amount = max(Decimal('1') if unit == '人' else Decimal('.01'), amount)
-        events.append({'event_id': f'CASE-{work_id}-{n}', 'kind': spec['kind'], 'entity': spec['entity'],
-                       'amount_yuan_or_count': str(amount), 'parameters': copy.deepcopy(spec['parameters']),
-                       'business': BY_KIND[spec['kind']]['name'], 'entity_name': NAMES[spec['entity']], 'unit': unit})
+    variation = config['variation']
+    multiplier = 100 + random.Random(seed).randint(-variation, variation)
     base = copy.deepcopy(base_city) if base_city is not None else new_city(config['profile_id'], seed)
-    preparations = []
+    events = []
+    for number, spec in enumerate(specs, 1):
+        c = BY_CASE[spec['kind']]
+        step = amount_step(c)
+        cents = max(step, round(Decimal(fen(spec['amount']) * multiplier) / (100 * step)) * step)
+        amount = Decimal(cents) / 100
+        events.append({'event_id': f'CASE-{work_id}-{number}', 'kind': c['kind'], 'entity': spec['entity'],
+                       'amount_yuan_or_count': str(amount), 'parameters': {}, 'business': c['name'],
+                       'entity_name': ACTORS[spec['entity']], 'unit': '元',
+                       'source': c['source'], 'statement': statement(c['kind'], amount)})
     preparation_events = []
+    probe = copy.deepcopy(base)
+    start = len(probe.journals)
+    for e in events:
+        needed = prerequisite(probe, e['kind'], e['entity'], e['amount_yuan_or_count'])
+        if needed and needed[2] is None:
+            prior, amount, _ = needed
+            previous = {'kind': prior, 'entity': e['entity'], 'amount_yuan_or_count': str(amount),
+                        'event_id': f'PREP-{work_id}-{len(preparation_events) + 1}', 'before_event_id': e['event_id']}
+            execute_event(probe, previous)
+            preparation_events.append(previous)
+        if e['kind'] in {'ex12-3', 'ex12-4'}:
+            current = probe.ledger[e['entity']].get('零余额账户用款额度', 0)
+            if current < fen(e['amount_yuan_or_count']):
+                previous = {'kind': 'ex12-1', 'entity': e['entity'],
+                            'amount_yuan_or_count': str(Decimal(fen(e['amount_yuan_or_count']) - current) / 100),
+                            'event_id': f'PREP-{work_id}-{len(preparation_events) + 1}', 'before_event_id': e['event_id']}
+                execute_event(probe, previous)
+                preparation_events.append(previous)
+        if e['kind'] == 'ex8-3' and probe.ledger[e['entity']].get('库存物品', 0) < fen(e['amount_yuan_or_count']):
+            previous = {'kind': 'ex10-1', 'entity': 'police', 'amount_yuan_or_count': e['amount_yuan_or_count'],
+                        'event_id': f'PREP-{work_id}-{len(preparation_events) + 1}', 'before_event_id': e['event_id']}
+            execute_event(probe, previous)
+            preparation_events.append(previous)
+        execute_event(probe, e)
+    ids = {e['event_id'] for e in events}
+    refs = [r for r in expected_entries(probe, start) if r['event_id'] in ids]
+    ch = CHAPTERS[assignment.chapter - 1]
+    case = {'revision': '1125', 'chapter': assignment.chapter, 'chapter_title': ch['title'],
+            'report_tables': list(ch['report_tables']), 'events': events,
+            'preparation_events': preparation_events,
+            'preparation': [f"{BY_CASE[e['kind']]['source']} · {ACTORS[e['entity']]}："
+                            + statement(e['kind'], e['amount_yuan_or_count']) for e in preparation_events],
+            'statement': '、'.join(f"{e['source']} {e['business']}" for e in events),
+            'basis': '《政府会计教程》1125版正文。按所列例题的题设和会计科目核对。'}
+    return case, refs, display_report(base.report())
 
-    def add_preparation(kind, amount, entity='hospital', **parameters):
-        eid = f'PREP-{work_id}-{len(preparations)+1}'
-        base.event(kind, float(amount), entity, event_id=eid, **parameters)
-        preparation_events.append({'event_id':eid, 'kind':kind, 'entity':entity,
-                                   'amount_yuan_or_count':str(amount), 'parameters':parameters})
-        preparations.append(f"{NAMES[entity]}：{BY_KIND[kind]['name']} {amount}元（期初仿真准备，不列入本题待答分录）")
-
-    # Dependencies are actual, persisted opening transactions, not unexplained ledger edits.
-    for _ in range(len(events)*3 + 3):
-        probe = copy.deepcopy(base)
-        restart = False
-        for event in events:
-            kind, entity = event['kind'], event['entity']
-            if kind == 'collect' and probe.ledger['hospital']['应收账款'] <= 0:
-                add_preparation('medical', 10000); restart = True; break
-            if kind == 'complete' and probe.ledger[entity]['在建工程'] <= 0:
-                add_preparation('construction', 50000, entity, name='待交付工程'); restart = True; break
-            if kind == 'depreciation' and not any(a['start'] <= probe.month and a.get('last_month', -1) < probe.month
-                                                and a['used'] < a['cost'] for a in probe.assets):
-                add_preparation('purchase', 10000, name='折旧实训设备', life=60); restart = True; break
-            if kind == 'tax':
-                short = Decimal(event['amount_yuan_or_count']) - Decimal(max(0, -probe.ledger['soe']['应交税费——应交增值税']))/100
-                if short > 0:
-                    add_preparation('sales', (short*25+1000).quantize(Decimal('.01')), 'soe', product='供电')
-                    restart = True; break
-            start = len(probe.journals)
-            try:
-                execute_event(probe, event)
-            except ValueError as exc:
-                if str(exc) == '资金不足' and entity in {'hospital', 'school', 'police'}:
-                    add_preparation('grant', Decimal(event['amount_yuan_or_count']), entity)
-                    restart = True; break
-                raise
-            event['reference_line_count'] = len(expected_entries(probe, start))
-        if not restart:
-            break
-    else:
-        raise ValueError('本组业务前置条件存在冲突，请调整业务顺序或金额')
-    before = base.report()
-    refs = expected_entries(probe, len(base.journals))
-    ch = CHAPTERS[assignment.chapter-1]
-    statements = []
-    for n, event in enumerate(events, 1):
-        quantity = '按当前余额计算' if event['unit'] == '无' else f"{event['amount_yuan_or_count']}{event['unit']}"
-        statements.append(f"业务{n}：{event['entity_name']}发生{event['business']}，{quantity}。")
-    case = {'preparation_events': preparation_events, 'chapter': assignment.chapter, 'chapter_title': ch['title'], 'case_title': ch['case'],
-            'focus': ch['focus'], 'question': ch['question'], 'events': events, 'preparation': preparations,
-            'statement': ' '.join(statements), 'business': '、'.join(e['business'] for e in events),
-            'entity': events[0]['entity'], 'entity_name': events[0]['entity_name'],
-            'amount_yuan_or_count': events[0]['amount_yuan_or_count'], 'event_id': events[0]['event_id'],
-            'parameters': events[0]['parameters'],
-            'basis': '参考分录依据本组业务资料、各业务核算规则及个人城市期初账簿生成；前置交易已在资料中单独列示。'}
-    return seed, base, case, refs, before
 
 
 def assignment_view(a):
@@ -415,13 +353,14 @@ def ensure_class_city(session, cls, student):
                          name=f'{cls.name[:25]} · {student.display_name[:16]} · {student.id}',
                          seed=seed, month=0, version=0, state={}, running=False, interval=8, pause_at_year=True)
         session.add(sim); session.flush()
-        persist(session, sim, city, (0, 0, 0)); remember_snapshot(session, sim, city.report())
+        persist(session, sim, city, (0, 0, 0)); remember_snapshot(session, sim, display_report(city.report()))
     session.add(ClassCity(class_id=cls.id, student_id=student.id, simulation_id=sim.id)); session.flush()
     return sim
 
 
 def pending_works(session, sid):
     return list(session.scalars(select(StudentWork).where(StudentWork.simulation_id == sid,
+        StudentWork.case_data['revision'].as_string() == '1125',
         StudentWork.confirmed_at.is_(None)).order_by(StudentWork.created_at, StudentWork.id)))
 
 
@@ -438,10 +377,12 @@ def initialize_class_cities(db):
                 ensure_class_city(session, cls, student)
 
 
-def apply_preparations(city, case):
-    if not case.get('preparation_posted'):
-        for event in case.get('preparation_events', []):
-            execute_event(city, event)
+def replay_work(city, case):
+    for event in case['events']:
+        for previous in case['preparation_events']:
+            if previous['before_event_id'] == event['event_id']:
+                execute_event(city, previous)
+        execute_event(city, event)
 
 
 def add_work(session, assignment, student, cls):
@@ -451,16 +392,9 @@ def add_work(session, assignment, student, cls):
     city = restore(session, sim)
     pending = pending_works(session, sim.id)
     for earlier in pending:
-        apply_preparations(city, earlier.case_data)
-        for event in earlier.case_data['events']:
-            execute_event(city, event)
+        replay_work(city, earlier.case_data)
     work_id = str(uuid.uuid4())
-    seed, prepared, case, reference, before = prepare_case(assignment, student, work_id, city)
-    if not pending:
-        counts = (len(city.events), len(city.journals), len(city.year_reports))
-        persist(session, sim, prepared, counts); remember_snapshot(session, sim, before)
-        case['preparation_posted'] = True
-    case['statement'] = '本班每名学生共用一套城市，请按任务发布顺序确认入账。' + case['statement']
+    case, reference, before = prepare_case(assignment, student, work_id, city)
     work = StudentWork(id=work_id, assignment_id=assignment.id, student_id=student.id,
                        simulation_id=sim.id, case_data=case, reference_entries=reference,
                        rubric=assignment.rubric, before_report=before, status='assigned')
@@ -473,8 +407,8 @@ def publish(session, body, user):
     if body.profile_id != cls.profile_id:
         raise HTTPException(422, '本班账套方案已固定，请使用班级创建时的方案，不能随任务切换')
     specs = body.events if isinstance(body, AssignmentGroupCreate) else [body]
-    events = [canonical_event(s) for s in specs]
-    scenario = {'events': events, 'variation': body.amount_variation_percent, 'profile_id': body.profile_id}
+    events = [canonical_event(s, body.chapter) for s in specs]
+    scenario = {'events': events, 'variation': body.amount_variation_percent, 'profile_id': body.profile_id, 'revision': '1125'}
     fingerprint = digest({'class_id': body.class_id, 'chapter': body.chapter, 'title': body.title,
                           'instruction': body.instruction, 'scenario': scenario})
     aid = str(uuid.uuid5(uuid.NAMESPACE_URL, f'caifa-publish/{user.id}/{body.request_id}')) if body.request_id else str(uuid.uuid4())
@@ -509,11 +443,16 @@ def publish(session, body, user):
 
 @router.get('/catalog')
 def catalog(user=Depends(current_user)):
-    return {'chapters': CHAPTERS, 'business_types': CATALOG, 'entities': NAMES,
-            'class_templates': [{'size': n, 'name': f'{n}人实训班'} for n in (20, 30, 40, 50, 60)],
-            'exercise_templates': EXERCISE_TEMPLATES,
-            'profiles': [{'id': 'textbook', 'name': '彩珐市教材基准'},
-                         {'id': 'jingzhou2025', 'name': '荆州公开数据参考（1∶100）'}],
+    return {'chapters': CHAPTERS, 'business_types': CATALOG, 'entities': ACTORS,
+            'class_templates': [{'size': n, 'name': f'{n}人实训班'} for n in (10, 20, 30, 40, 50, 60)],
+            'exercise_templates': [
+                {'id': f"chapter-{ch['chapter']}", 'chapter': ch['chapter'], 'name': '本章全部业务',
+                 'events': [{'kind': c['kind'], 'entity': c['entities'][0], 'amount': c['amount']}
+                            for c in CATALOG if c['kind'] in ch['business_kinds']]}
+                for ch in CHAPTERS],
+            'profiles': [{'id': key, 'name': name, 'opening_bank_deposits': OPENING_BANK_DEPOSITS[key]}
+                         for key, name in [('textbook', '彩珐市教材例题（1125版）'),
+                                           ('jingzhou2025', '荆州公开数据参考（1∶100）')]],
             'assessment': {'kind': '可复核的规则初评', 'weights': WEIGHTS}}
 
 
@@ -563,19 +502,11 @@ def template_class(body: TemplateClassCreate, request: Request, user=Depends(cur
             session.flush()
             for student in users:
                 ensure_class_city(session, cls, student)
-            assigned = None
-            if body.exercise_template_id != 'none':
-                tpl = next(t for t in EXERCISE_TEMPLATES if t['id'] == body.exercise_template_id)
-                assigned = publish(session, AssignmentGroupCreate(
-                    class_id=cid, chapter=body.chapter, title=f"第{body.chapter}章 · {tpl['name']}",
-                    events=[BusinessSpec.model_validate(e) for e in tpl['events']],
-                    amount_variation_percent=body.amount_variation_percent, profile_id=body.profile_id,
-                    request_id=f'template-{cid}'), user)
             audit(session, user, 'template_class', cid, {'fingerprint': fingerprint, 'size': body.size})
     except IntegrityError as exc:
         raise HTTPException(409, '账号名称发生冲突，班级生成已回滚，请更换账号前缀') from exc
     return {'id': cid, 'name': body.name, 'size': body.size, 'credentials': credentials,
-            'assignment': assigned, 'duplicate': False,
+            'assignment': None, 'duplicate': False,
             'message': '班级和账号已生成，可在班级管理中查询账号与密码，再到任务分配中布置练习。'}
 
 
@@ -786,10 +717,8 @@ def actual_line(row):
     if not isinstance(row, dict):
         raise HTTPException(422, '每条分录须为对象')
     entity, book, side, account = (row.get(k) for k in ('entity', 'book', 'side', 'account'))
-    if entity not in NAMES or book not in {'financial', 'budget'} or side not in {'debit', 'credit'}:
-        raise HTTPException(422, '请检查主体、账套和借贷方向')
-    if book == 'budget' and entity == 'soe':
-        raise HTTPException(422, '国有企业不设置行政事业单位预算会计账')
+    if entity not in ACTORS or book not in {'financial', 'budget'} or side not in {'debit', 'credit'}:
+        raise HTTPException(422, '请检查会计主体、会计核算和借贷方向')
     if not isinstance(account, str) or not account.strip() or len(account) > 160:
         raise HTTPException(422, '请输入有效会计科目')
     try:
@@ -869,10 +798,20 @@ def submit(work_id: str, body: Submission, request: Request, user=Depends(curren
     role(user, 'student')
     with request.app.state.db.transaction(write=True) as session:
         w = owned_work(session, work_id, user)
+        if w.case_data.get('revision') != '1125':
+            raise HTTPException(409, '原版实训仅供查阅，请由教师按教材1125版重新布置')
         if w.confirmed_at and w.status != 'needs_revision':
             raise HTTPException(409, '已确认的练习请先由教师退回修改')
+        subjects = {e['event_id']: e['entity'] for e in w.case_data['events']}
+        if any(not isinstance(row, dict) or not isinstance(row.get('event_id'), str)
+               or subjects.get(row['event_id']) is None or row.get('entity') != subjects[row['event_id']]
+               for row in body.entries):
+            raise HTTPException(422, '请仅填写每项业务指定会计主体的分录')
         attempt = grade(body.entries, w.reference_entries, w.rubric)
-        attempt.update(student_note=body.student_note, analysis=body.analysis, submitted_at=time.time(),
+        attempt['basis'] = w.case_data['basis']
+        if w.case_data['chapter'] < 14:
+            attempt['basis'] += ' 评分依据为本题指定单位的分录。涉及国库支付的业务在确认入账时同步登记财政总会计账。'
+        attempt.update(submitted_at=time.time(),
                        attempt_no=(w.latest_attempt or {}).get('attempt_no', 0)+1)
         w.latest_attempt = attempt; w.teacher_review = None; w.status = 'submitted'; w.updated_at = time.time()
         audit(session, user, 'submit_work', work_id, attempt)
@@ -884,6 +823,8 @@ def check_work(work_id: str, body: StudentCheck, request: Request, user=Depends(
     role(user, 'student')
     with request.app.state.db.transaction(write=True) as session:
         w = owned_work(session, work_id, user)
+        if w.case_data.get('revision') != '1125':
+            raise HTTPException(409, '原版实训仅供查阅，请由教师按教材1125版重新布置')
         if not w.latest_attempt:
             raise HTTPException(409, '请先提交作答并查看初评')
         check = {'action': body.action, 'note': body.note, 'checked_at': time.time()}
@@ -907,30 +848,51 @@ def check_work(work_id: str, body: StudentCheck, request: Request, user=Depends(
         city = restore(session, sim)
         counts = (len(city.events), len(city.journals), len(city.year_reports))
         case = w.case_data
-        assignment = session.get(TeachingAssignment, w.assignment_id)
-        events = case.get('events') or [{'kind': assignment.scenario['kind'], 'entity': assignment.scenario['entity'],
-                    'amount_yuan_or_count': case['amount_yuan_or_count'], 'parameters': assignment.scenario['parameters'],
-                    'event_id': case['event_id']}]
+        events = case['events']
         try:
-            apply_preparations(city, case)
-            before = city.report()
+            before = display_report(city.report())
             reference_start = len(city.journals)
-            for event in events:
-                execute_event(city, event)
-            if expected_entries(city, reference_start) != w.reference_entries:
+            replay_work(city, case)
+            ids = {e['event_id'] for e in events}
+            if [r for r in expected_entries(city, reference_start) if r['event_id'] in ids] != w.reference_entries:
                 raise HTTPException(409, '账套余额与本题参考依据不一致，未入账；请教师核查，不会强行使用旧参考答案')
             city.check()
-            persist(session, sim, city, counts); remember_snapshot(session, sim, city.report())
+            persist(session, sim, city, counts); remember_snapshot(session, sim, display_report(city.report()))
         except (ValueError, AssertionError) as exc:
             raise HTTPException(422, f'整组业务未入账，所有改动已回滚：{exc}') from exc
         w.status = 'confirmed'; w.confirmed_at = time.time(); w.updated_at = time.time()
         w.before_report = before
+        w.case_data = {**case, 'posted_report': display_report(city.report())}
         audit(session, user, 'confirm_and_post', work_id, {**check, 'events': len(events)})
         return {'status': w.status, 'simulation': metadata(sim), 'duplicate': False,
                 'message': '整组业务已一次性计入个人城市账套，可比较前后报表。'}
 
 
-def work_view(w, assignment=None, student=None):
+def work_postings(session, w):
+    prepared = w.case_data.get('preparation_events', [])
+    exercises = w.case_data.get('events', [])
+    specs = [(e, None) for e in prepared] + list(zip(exercises, range(1, len(exercises) + 1)))
+    keys = [e['event_id'] for e, _ in specs]
+    posted = {}
+    if w.confirmed_at and keys:
+        for event, voucher in session.execute(select(BusinessEvent, Voucher).outerjoin(
+                Voucher, Voucher.event_id == BusinessEvent.id).where(
+                BusinessEvent.simulation_id == w.simulation_id, BusinessEvent.event_key.in_(keys))):
+            posted[event.event_key] = (event, voucher)
+    result = []
+    for e, task_number in specs:
+        config = BY_CASE[e['kind']]
+        event, voucher = posted.get(e['event_id'], (None, None))
+        fiscal = [part for part in sections(voucher.payload) if part.get('automatic')] if voucher else []
+        result.append({'key': e['event_id'], 'task_number': task_number, 'source': config['source'],
+                       'business': config['name'], 'payment': config.get('payment'),
+                       'event_number': event.sequence if event else None,
+                       'business_code': event.business_code if event else None,
+                       'voucher_number': voucher.number if voucher else None, 'fiscal_sections': fiscal})
+    return sorted(result, key=lambda row: (row['event_number'] is None, row['event_number'] or 0))
+
+
+def work_view(w, assignment=None, student=None, session=None):
     result = {'id': w.id, 'student_id': w.student_id, 'status': w.status, 'case': w.case_data,
               'attempt': w.latest_attempt, 'assessment': w.latest_attempt, 'confirmed': bool(w.confirmed_at),
               'teacher_review': w.teacher_review, 'updated_at': w.updated_at, 'before_report': w.before_report}
@@ -939,6 +901,8 @@ def work_view(w, assignment=None, student=None):
                       instruction=assignment.instruction, score=(w.latest_attempt or {}).get('score'))
     if student:
         result['student'] = user_view(student)
+    if session is not None and w.case_data.get('revision') == '1125':
+        result['postings'] = work_postings(session, w)
     return result
 
 
@@ -973,12 +937,12 @@ def dashboard(request: Request, user=Depends(current_user)):
         for w in rows:
             assignment = session.get(TeachingAssignment, w.assignment_id)
             sim = session.get(Simulation, w.simulation_id)
-            item = work_view(w, assignment)
+            item = work_view(w, assignment, session=session)
             waiting = pending_works(session, sim.id)
-            item['can_confirm'] = not waiting or waiting[0].id == w.id
+            item['can_confirm'] = w.case_data.get('revision') == '1125' and (not waiting or waiting[0].id == w.id)
             item['class_name'] = session.get(TeachingClass, assignment.class_id).name
             c = load_city(sim.state, [], [], [])
-            item['after_report'] = c.report()
+            item['after_report'] = w.case_data.get('posted_report') or display_report(c.report())
             item['simulation'] = {'simulation': metadata(sim), 'population': c.population,
                 'event_count': session.scalar(select(func.count()).select_from(BusinessEvent).where(BusinessEvent.simulation_id == sim.id)),
                 'voucher_count': session.scalar(select(func.count()).select_from(Voucher).where(Voucher.simulation_id == sim.id))}
@@ -995,7 +959,7 @@ def assignment_works(assignment_id: str, request: Request, user=Depends(current_
             raise HTTPException(404, '未找到该任务')
         works = session.scalars(select(StudentWork).where(StudentWork.assignment_id == a.id).order_by(StudentWork.student_id)).all()
         return {'assignment': assignment_view(a),
-                'works': [work_view(w, a, session.get(User, w.student_id)) for w in works]}
+                'works': [work_view(w, a, session.get(User, w.student_id), session) for w in works]}
 
 
 @router.get('/works/{work_id}/history')
@@ -1028,10 +992,10 @@ def combined_overview(request: Request, user=Depends(current_user)):
         ids = [s.id for s in sims]
         def counts(model):
             return dict(session.execute(select(model.simulation_id, func.count()).where(
-                model.simulation_id.in_(ids)).group_by(model.simulation_id)).all()) if ids else {}
+                model.simulation_id.in_(ids), model.entity.in_(ACTORS)).group_by(model.simulation_id)).all()) if ids else {}
         ec, vc = counts(BusinessEvent), counts(Voucher)
         cities = [{'simulation': metadata(s), 'population': sum(s.state['population'].values()),
-                   'entities': len(s.state['ledger']), 'event_count': ec.get(s.id, 0), 'voucher_count': vc.get(s.id, 0),
+                   'entities': len(ACTORS), 'event_count': ec.get(s.id, 0), 'voucher_count': vc.get(s.id, 0),
                    'closing_cash_yuan': s.state['ledger']['fiscal'].get('国库存款', 0)/100,
                    'profile_id': s.state.get('profile_id', 'textbook')} for s in sims]
     assignments = sum(len(c['assignments']) for c in teaching['classes']) if user.role == 'teacher' else len(teaching['works'])
