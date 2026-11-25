@@ -1,0 +1,11 @@
+const fs=require('node:fs'),path=require('node:path'),assert=require('node:assert/strict');
+const base=path.join(__dirname,'../app/static');
+const html=fs.readFileSync(path.join(base,'index.html'),'utf8');
+const js=fs.readFileSync(path.join(base,'monthly.js'),'utf8');
+assert.doesNotMatch(html,/mermaid/i);
+assert.doesNotMatch(js,/renderMonthlyMermaid/);
+assert.match(js,/monthlyCity\(p,p.month===chosen.month\)/);
+assert.match(js,/class="city-icon"/);
+assert.match(js,/class="month-flow"/);
+assert.match(js,/visiblePoints=points.filter\(p=>p.month>0\)/);
+console.log('Restored standalone 3D city SVGs, flow arrows and no Mermaid loading passed.');

@@ -1,0 +1,7 @@
+# Pinned runtime dependencies for the Railway pilot image.
+# cryptography is required to protect the teacher-visible student password vault.
+fastapi==0.141.1
+pydantic==2.13.5
+SQLAlchemy==2.0.52
+uvicorn==0.52.4
+cryptography==46.0.7

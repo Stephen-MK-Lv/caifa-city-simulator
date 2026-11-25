@@ -1,0 +1,8 @@
+<!doctype html>
+<html lang="zh-CN"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>彩珐市 · 政府会计仿真平台</title><link rel="stylesheet" href="/static/portal.css?v=20261024-city-v2"></head>
+<body><header class="top"><div class="brand"><span class="seal">彩</span><div><b>彩珐市</b><small>政府会计仿真平台</small></div></div><div id="identity" class="identity"></div><span hidden>CAIFA / CITY SIMULATION</span></header>
+<main class="wrap"><section id="auth" class="auth card" hidden><p class="eyebrow">CAIFA · DIGITAL CITY</p><h1 id="auth-title">登录仿真平台</h1><p id="auth-help" class="muted">教师与学生使用各自账号登录。首次启动时先建立教师账号。</p>
+<form id="auth-form" class="form-grid"><label>登录名<input name="username" required minlength="3" autocomplete="username"></label><label id="display-field" hidden>姓名<input name="display_name" minlength="1"></label><label>密码<input name="password" type="password" required minlength="10" autocomplete="current-password"></label><button class="primary" id="auth-submit">登录</button></form><p id="auth-error" class="error" hidden></p></section>
+<div id="app" hidden><nav class="tabs"><button class="tab active" data-tab="overview">统一总览</button><button class="tab" data-tab="class">班级与任务</button><button class="tab" data-tab="work">我的章节实训</button><a class="tab" href="/city" target="_blank">彩珐市运行图景 ↗</a></nav>
+<section id="overview" class="panel"></section><section id="class" class="panel" hidden></section><section id="work" class="panel" hidden></section></div></main>
+<footer>仿真数据仅用于课程训练；AI 初评用于反馈，不替代学生核查与教师最终评价。</footer><script src="/static/management.js?v=20261024-city-v2"></script><script src="/static/portal.js?v=20261123-monthly-entry"></script></body></html>

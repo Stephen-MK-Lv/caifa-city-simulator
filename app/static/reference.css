@@ -1,0 +1,17 @@
+.reference-panel { margin: 0 0 22px; border-top: 3px solid #315b4d; }
+.reference-panel .panel-head { align-items: start; }
+.reference-highlights { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; padding: 0 24px; }
+.reference-highlights p { background: #f2f5ed; margin: 0; padding: 15px; border-radius: 6px; }
+.reference-highlights strong { display: block; color: #315044; font-size: 22px; }
+.reference-highlights span { display: block; font-size: 12px; margin-top: 5px; color: #667567; }
+.reference-warning { margin: 18px 24px; padding: 12px 15px; background: #faf2de; border-left: 3px solid #b98842; font-size: 13px; line-height: 1.8; }
+.reference-panel details { padding: 0 24px 20px; font-size: 13px; line-height: 1.85; }
+.reference-panel summary { cursor: pointer; color: #315b4d; font-weight: 600; }
+.reference-panel h3 { margin-top: 22px; }
+.reference-panel td { white-space: normal; }
+.reference-methods { padding-left: 22px; }
+.reference-methods li { margin: 8px 0; }
+.profile-banner { padding: 14px 18px; margin-bottom: 20px; background: #f2f5ed; border-left: 3px solid #b98842; font-size: 13px; }
+.city-map { min-width: 580px; }
+.map-panel { overflow-x: auto; }
+@media(max-width:700px){.reference-highlights{grid-template-columns:1fr}.reference-panel .panel-head{display:block}.reference-panel details{padding:0 14px 18px}.reference-warning{margin:14px}}

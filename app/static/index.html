@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#173e38"><title>彩珐市 · 城市发展仿真实验室</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20261024-city-v6">
+  <link rel="stylesheet" href="/static/reference.css?v=20261024-city-v6">
+  <link rel="stylesheet" href="/static/monthly.css?v=20261024-city-v6">
+  <link rel="stylesheet" href="/static/monthly-compact.css?v=20261024-city-v6">
+  <script src="/static/monthly.js?v=20261025-restored" defer></script>
+  <script src="/static/app.js?v=20261123-monthly-entry" defer></script>
+</head>
+<body>
+<a href="#main" class="skip-link">跳到主要内容</a>
+<aside class="sidebar">
+  <a class="brand" href="#overview" aria-label="彩珐市城市发展仿真实验室首页"><span class="brand-mark">彩</span><span><strong>彩珐市</strong><small>城市发展仿真实验室</small></span></a>
+  <div class="edition">中国政府会计学 · 数字实训</div>
+  <a class="side-create" href="/">← 返回仿真平台</a>
+  <label for="simulation-select" class="side-label">当前账套</label>
+  <select id="simulation-select" aria-label="切换账套"><option value="">尚无账套</option></select>
+  <button id="create-button" class="side-create">＋ 新建独立账套</button>
+  <nav aria-label="主要导航">
+    <a href="#monthly" data-view="monthly"><span>⬡</span> 发展过程动态</a>
+    <a href="#overview" data-view="overview"><span>◫</span> 城市当前总览</a>
+    <a href="#events" data-view="events"><span>↔</span> 业务事件簿</a>
+    <a href="#vouchers" data-view="vouchers"><span>▤</span> 会计凭证簿</a>
+    <a href="#reports" data-view="reports"><span>▥</span> 账簿与报告</a>
+    <a href="#assets" data-view="assets"><span>◇</span> 资产台账簿</a>
+    <a href="#guide" data-view="guide"><span>◎</span> 使用与规则</a>
+  </nav>
+  <div class="side-footer"><span class="status-dot"></span> 本地运行 · 持久保存<small>FastAPI ＋ SQLAlchemy<br>规则驱动的虚拟仿真城市</small></div>
+</aside>
+<main id="main">
+  <header class="topbar"><span id="breadcrumb">仿真工作台 / 城市当前总览</span><span class="top-note">独立账套 · 固定种子 · 业务可追溯</span></header>
+  <div id="connection-alert" class="alert danger" hidden role="alert"></div>
+  <div class="page-heading"><div><p class="eyebrow">CAIFA / CITY SIMULATION</p><h1 id="page-title">让业务发生，让账目清晰。</h1><p id="page-subtitle" class="subtitle">基于城市发展，动态理解一座城市。</p></div><button class="button secondary" id="export-button" disabled>↓ 导出账套数据</button></div>
+  <section id="empty-state" class="onboarding" hidden>
+    <span class="empty-symbol">彩</span><h2>从一座有据可查的城市开始</h2>
+    <p>财政局、医院、学校、公安局和国企在同一情景中运行。<br>每次业务留下凭证，每个账套独立保存。</p>
+    <button id="first-city" class="button primary">创建彩珐市账套 <span>＋</span></button>
+    <div class="onboarding-foot">荆州公开数据参考 / 原教材方案可选<span>5 个核心主体</span>财务、预算双视角</div>
+  </section>
+  <div id="workspace" hidden>
+    <section class="control-strip" aria-label="仿真控制">
+      <div class="period"><span class="calendar-icon">▦</span><div><strong id="period-label">期初</strong><small id="period-status">等待业务发生</small></div></div>
+      <div class="control-options"><label>每月间隔 <select id="interval-select" aria-label="自动推进间隔"><option value="3">3 秒</option><option value="8" selected>8 秒</option><option value="15">15 秒</option><option value="30">30 秒</option></select></label><label class="checkbox"><input id="pause-at-year" type="checkbox" checked>年末暂停</label></div>
+      <div class="control-buttons"><button id="run-button" class="button secondary">▶ 自动运行</button><select id="advance-months" aria-label="手动推进月数"><option value="1">1 个月</option><option value="3">3 个月</option><option value="12">12 个月</option></select><button id="advance-button" class="button primary">推进月份 →</button></div>
+    </section>
+    <div id="simulation-alert" class="alert" hidden role="status"></div>
+    <div id="view-content" aria-live="polite"></div>
+  </div>
+  <footer class="main-footer"><span>彩珐市 / 中国政府会计学数字资源</span><span>仅用于仿真，不办理真实资金支付。</span></footer>
+</main>
+<div id="toast" class="toast" role="status" hidden></div>
+<dialog id="create-dialog" class="dialog small-dialog">
+  <form id="create-form"><div class="dialog-header"><div><p class="eyebrow">NEW SIMULATION</p><h2>新建独立账套</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div>
+    <p class="muted">保留原有账套；相同方案、版本、种子与操作顺序可重演业务路径。</p>
+    <label>账套名称<input name="name" required maxlength="60" value="彩珐市 · 课堂实训" autocomplete="off"></label>
+    <label>仿真数据方案<select name="profile_id"><option value="jingzhou2025">荆州公开数据参考（2025年 / 1∶100）</option><option value="textbook">原教材基准（保留原规则）</option></select></label>
+    <p class="field-hint">荆州方案：期初50,829人、724个示范岗位。国库资金按仿真规则设置。不改写已有账套。</p>
+    <div class="form-row"><label>随机种子<input name="seed" type="number" value="20260906" min="0" max="4294967295" required></label><label>预运行<select name="initial_months"><option value="0">从期初开始</option><option value="1">演示 1 个月</option><option value="3">演示 3 个月</option><option value="12">演示 1 年</option></select></label></div>
+    <p class="form-error" id="create-error" role="alert"></p><button type="submit" class="button primary full">创建账套</button>
+  </form>
+</dialog>
+<dialog id="event-dialog" class="dialog small-dialog">
+  <form id="event-form"><div class="dialog-header"><div><p class="eyebrow">BUSINESS EVENT</p><h2>触发一笔业务</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div>
+    <label>业务类型<select name="kind" id="event-kind"></select></label>
+    <p id="event-hint" class="field-hint"></p>
+    <div class="form-row"><label>核算主体<select name="entity" id="event-entity"></select></label><label id="amount-label"><span id="amount-text">金额（元）</span><input name="amount" type="number" step="0.01" min="0.01" max="1000000000" required></label></div>
+    <div id="event-extra"></div><label>业务编号（可选）<input name="event_id" maxlength="80" placeholder="如：课堂医疗001" autocomplete="off"><small>相同编号防止重复记账，不同内容请使用新编号。</small></label>
+    <p class="form-error" id="event-error" role="alert"></p><button type="submit" class="button primary full">执行并生成会计记录</button>
+  </form>
+</dialog>
+<dialog id="detail-dialog" class="dialog wide-dialog"><div class="dialog-header"><div><p class="eyebrow">EVENT / JOURNAL TRACE</p><h2 id="detail-title">业务与平行记账</h2></div><button type="button" class="icon-button close-dialog" aria-label="关闭">×</button></div><div id="detail-content"></div></dialog>
+<aside id="monthly-popup" class="monthly-hover" hidden role="region" aria-labelledby="monthly-popup-title"><button type="button" id="monthly-popup-close" aria-label="关闭月度信息">×</button><div id="monthly-popup-content"></div></aside>
+</body></html>
