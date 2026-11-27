@@ -11,9 +11,27 @@ ACTORS = {k: v for k, v in NAMES.items() if k != 'soe'}
 ACTORS['fiscal'] = '彩珐市财政总会计'
 MONEY = '资金结存——货币资金'
 QUOTA = '资金结存——零余额账户用款额度'
+# 期初货币资金额度（元），按「潜在业务量」测算并覆盖每一个会计主体：
+# 把教材全部例题中该主体可能发生的全部付款额加总，再按教师端 ±25% 金额浮动、
+# 至少 10 轮重复练习估算峰值，向上取整到便于读账的整额。
+#   全教材单轮付款额：财政总会计 3,651,650；人民医院 107,500；
+#   职业学校 107,500；公安局 50,000。
+# 财政总会计的货币资金账户是「国库存款」而非「银行存款」，其余主体为「银行存款」。
+# 荆州方案的国库存款沿用 58,299,000,000÷12÷100 的公开数据缩尺公式，医院沿用
+# 5,000,000 元参考值；两者均已高于上述潜在付款需求，故不改写参考口径。
 OPENING_BANK_DEPOSITS = {
-    'textbook': {'hospital': 3000000, 'school': 600000},
-    'jingzhou2025': {'hospital': 5000000, 'school': 1000000},
+    'textbook': {
+        'fiscal': 100000000,    # 国库存款 1 亿元
+        'hospital': 3000000,    # 银行存款 300 万元
+        'school': 3000000,      # 银行存款 300 万元
+        'police': 1500000,      # 银行存款 150 万元
+    },
+    'jingzhou2025': {
+        'fiscal': 48582500,     # 国库存款（参考缩尺公式）
+        'hospital': 5000000,    # 银行存款 500 万元
+        'school': 3000000,      # 银行存款 300 万元
+        'police': 1500000,      # 银行存款 150 万元
+    },
 }
 
 
@@ -263,13 +281,22 @@ def activate(city):
 def new_city(profile, seed):
     city = activate(JingzhouCity(seed) if profile == 'jingzhou2025' else City(seed))
     for entity, amount in OPENING_BANK_DEPOSITS[profile].items():
+        if entity not in city.ledger:
+            continue  # 教材账套不含国企主体
         ledger = city.ledger[entity]
-        budget = city.budget[entity]
-        difference = fen(amount) - ledger['银行存款']
-        ledger['银行存款'] += difference
-        ledger['累计盈余'] -= difference
-        budget[MONEY] += difference
-        budget['非财政拨款结余'] -= difference
+        cash = '国库存款' if entity == 'fiscal' else '银行存款'
+        equity = '实收资本' if entity == 'soe' else '累计盈余'
+        difference = fen(amount) - ledger[cash]
+        if not difference:
+            continue
+        ledger[cash] += difference
+        ledger[equity] -= difference
+        if entity in city.budget:
+            budget = city.budget[entity]
+            money = '资金结存' if entity == 'fiscal' else MONEY
+            reserve = '一般公共预算结转结余' if entity == 'fiscal' else '非财政拨款结余'
+            budget[money] += difference
+            budget[reserve] -= difference
     city.opening_cash = money_total(city) + sum(city.external.values())
     city.check()
     return city

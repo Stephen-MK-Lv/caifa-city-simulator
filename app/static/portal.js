@@ -4,7 +4,7 @@ const tokenKey='caifa.platform.token';
 let token=localStorage.getItem(tokenKey)||'',me,course,dashboard,classId='',activeWork='',draft=null,credentials=[],pending={},chapterDrafts={},selectedChapters={1:true};
 const names={fiscal:'财政总会计',hospital:'人民医院',school:'职业学校',police:'公安局'};
 function notice(message,error=false){let n=$('#notice');if(!n){n=document.createElement('div');n.id='notice';n.setAttribute('role','status');$('.wrap').prepend(n)}n.className=error?'notice error':'notice';n.textContent=message}
-async function api(path,options={}){const r=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`}:{})},signal:AbortSignal.timeout(180000)});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(Array.isArray(d.detail)?d.detail.map(x=>`${x.loc.slice(1).join(' · ')}：${x.msg}`).join('；'):(d.detail||`请求失败 ${r.status}`));return d}
+async function api(path,options={}){const r=await fetch('/api'+path,{...options,headers:{'Content-Type':'application/json',...(token?{Authorization:`Bearer ${token}`,'X-Caifa-Token':`Bearer ${token}`}:{})},signal:AbortSignal.timeout(180000)});let d={};try{d=await r.json()}catch{}if(!r.ok)throw Error(Array.isArray(d.detail)?d.detail.map(x=>`${x.loc.slice(1).join(' · ')}：${x.msg}`).join('；'):(d.detail||`请求失败 ${r.status}`));return d}
 const post=(path,data)=>api(path,{method:'POST',body:JSON.stringify(data)});
 const obj=f=>Object.fromEntries(new FormData(f));
 function requestId(key,body){const fingerprint=JSON.stringify(body);if(pending[key]?.fingerprint!==fingerprint)pending[key]={fingerprint,id:crypto.randomUUID()};return pending[key].id}

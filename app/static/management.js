@@ -7,8 +7,12 @@ function renderTeacher(){
  const classOptions=options(classes.map(c=>[c.id,`${c.name} · ${c.students.length}人`]),classId);
  const profiles=options(course.profiles.map(p=>[p.id,p.name]),'textbook');
  const openingBalances=course.profiles.filter(p=>p.opening_bank_deposits).map(p=>{
-  const {hospital,school}=p.opening_bank_deposits;
-  return `<p class="hint">${esc(p.name)}期初银行存款：人民医院 ${(hospital/10000).toLocaleString('zh-CN')} 万元，职业学校 ${(school/10000).toLocaleString('zh-CN')} 万元。</p>`;
+  const items=Object.entries(p.opening_bank_deposits).map(([key,amount])=>{
+   const name=(course.entities&&course.entities[key])||key;
+   const account=key==='fiscal'?'国库存款':'银行存款';
+   return `${esc(name)}${account} ${(amount/10000).toLocaleString('zh-CN')} 万元`;
+  });
+  return `<p class="hint">${esc(p.name)}期初资金：${items.join('；')}。</p>`;
  }).join('');
  $('#class').innerHTML=`
  <nav class="tabs" aria-label="教师工作区"><button class="tab" data-teacher-pane="manage">班级管理</button><button class="tab" data-teacher-pane="assign">任务分配</button></nav>

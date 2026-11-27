@@ -22,7 +22,7 @@ async function api(path,options={}){
  let response;
  const headers=new Headers(options.headers);headers.set('Content-Type','application/json');
  const loginToken=localStorage.getItem('caifa.platform.token');
- if(loginToken)headers.set('Authorization','Bearer '+loginToken);
+ if(loginToken){headers.set('Authorization','Bearer '+loginToken);headers.set('X-Caifa-Token','Bearer '+loginToken);}
  try{response=await fetch('/api'+path,{...options,headers,cache:'no-store',signal:AbortSignal.timeout(45000)});}
  catch(e){const err=new Error('连接中断或响应超时。请检查本地服务；再次执行相同操作会使用原请求编号重试。');err.network=true;throw err;}
  let data;try{data=await response.json();}catch{throw new Error('服务器返回了无法读取的响应');}
@@ -122,7 +122,7 @@ $('#create-form').addEventListener('submit',async e=>{e.preventDefault();const f
 $('#simulation-select').addEventListener('change',async e=>{state.sid=e.target.value;state.summary=null;state.reportYear='';state.offset={events:0,vouchers:0};localStorage.setItem('mingchuan.sid',state.sid);await refresh(true).catch(showError);});
 $('#run-button').addEventListener('click',()=>mutation('run',{running:!state.summary.simulation.running,interval:Number($('#interval-select').value),pause_at_year:$('#pause-at-year').checked}).catch(showError));
 $('#advance-button').addEventListener('click',()=>mutation('advance',{months:Number($('#advance-months').value)}).catch(showError));
-$('#export-button').addEventListener('click',async()=>{if(!state.sid)return;const button=$('#export-button');button.disabled=true;try{const r=await fetch(`/api/simulations/${state.sid}/export`,{headers:{Authorization:'Bearer '+(localStorage.getItem('caifa.platform.token')||'')}});if(!r.ok)throw new Error('导出失败，请稍后重试');const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download=`彩珐市_${state.summary.simulation.month}月_账套数据.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('已导出业务、凭证、CSV分录及报表数据。');}catch(e){showError(e);}finally{button.disabled=false;}});
+$('#export-button').addEventListener('click',async()=>{if(!state.sid)return;const button=$('#export-button');button.disabled=true;try{const r=await fetch(`/api/simulations/${state.sid}/export`,{headers:{Authorization:'Bearer '+(localStorage.getItem('caifa.platform.token')||''),'X-Caifa-Token':'Bearer '+(localStorage.getItem('caifa.platform.token')||'')}});if(!r.ok)throw new Error('导出失败，请稍后重试');const url=URL.createObjectURL(await r.blob());const a=document.createElement('a');a.href=url;a.download=`彩珐市_${state.summary.simulation.month}月_账套数据.zip`;a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);toast('已导出业务、凭证、CSV分录及报表数据。');}catch(e){showError(e);}finally{button.disabled=false;}});
 window.addEventListener('hashchange',()=>navigate(location.hash.slice(1)));
 let polling=false;
 setInterval(async()=>{if(polling||state.busy||!state.sid||document.hidden)return;polling=true;try{await refresh();}catch(e){showError(e);}finally{polling=false;}},3000);
